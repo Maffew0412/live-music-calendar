@@ -40,7 +40,7 @@ export function EventMap() {
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200">
       <MapContainer
-        center={[center.lat, center.lng]}
+        center={[center.lat, center.lng] as [number, number]}
         zoom={zoom}
         className="h-[calc(100vh-280px)] w-full"
         scrollWheelZoom={true}
