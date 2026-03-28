@@ -39,15 +39,21 @@ export function EventMap() {
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200">
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
       <MapContainer
-        center={[center.lat, center.lng] as [number, number]}
-        zoom={zoom}
-        className="h-[calc(100vh-280px)] w-full"
-        scrollWheelZoom={true}
+        {...{
+          center: [center.lat, center.lng] as [number, number],
+          zoom,
+          className: "h-[calc(100vh-280px)] w-full",
+          scrollWheelZoom: true,
+        } as any}
       >
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          {...{
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          } as any}
         />
         <MapUpdater />
         {eventsWithCoords.map((event) => (
