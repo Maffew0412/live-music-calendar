@@ -9,6 +9,8 @@ const BASE_URL = isDev ? '/api/predicthq/v1/events/' : '/api/predicthq';
 // Priority venues — always fetch their events via text search + tight location
 const PRIORITY_VENUES = [
   { query: 'Deep Cuts', lat: 42.4179, lng: -71.1102 },
+  { query: 'City Winery', lat: 42.364381, lng: -71.0586485 },
+  { query: 'Royale Boston', lat: 42.3566466, lng: -71.1439322 },
 ];
 
 export async function searchPredictHQ(filters: SearchFilters): Promise<UnifiedEvent[]> {

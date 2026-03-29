@@ -31,6 +31,16 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/faces/, ''),
       },
+      '/api/obriens': {
+        target: 'https://obrienspubboston.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/obriens/, ''),
+      },
+      '/api/themet': {
+        target: 'https://themetri.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/themet/, ''),
+      },
     },
   },
 })
