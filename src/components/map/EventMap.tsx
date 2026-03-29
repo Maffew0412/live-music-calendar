@@ -1,5 +1,19 @@
+import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import { useEffect } from 'react';
+
+// Fix default marker icons not loading in production builds
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+});
 import { useEventSearch } from '../../hooks/useEventSearch';
 import { useFilters } from '../../hooks/useFilters';
 import { BOSTON_COORDS, ZOOM_FOR_RADIUS } from '../../config/constants';
