@@ -41,7 +41,7 @@ export async function searchPredictHQ(filters: SearchFilters): Promise<UnifiedEv
         ...(filters.dateRange?.end && { 'start.lte': filters.dateRange.end }),
         q: venue.query,
         within: `5mi@${venue.lat},${venue.lng}`,
-        limit: '50',
+        limit: '10',
         sort: 'start',
         state: 'active',
       }, headers)
