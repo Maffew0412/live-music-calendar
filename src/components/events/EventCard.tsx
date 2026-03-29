@@ -4,19 +4,22 @@ import { formatEventDate, formatEventTime } from '../../utils/dateFormatting';
 
 export function EventCard({ event }: { event: UnifiedEvent }) {
   return (
-    <div className="flex overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+    <div className="group flex overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+      {/* Accent left border */}
+      <div className="w-1 flex-shrink-0 bg-gradient-to-b from-indigo-500 via-purple-500 to-pink-500" />
+
       {/* Artist image */}
       {event.artistImageUrl ? (
-        <div className="hidden w-40 flex-shrink-0 sm:block">
+        <div className="hidden w-36 flex-shrink-0 sm:block">
           <img
             src={event.artistImageUrl}
             alt={event.artistName}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         </div>
       ) : (
-        <div className="hidden w-40 flex-shrink-0 items-center justify-center bg-gradient-to-br from-indigo-100 to-purple-100 sm:flex">
-          <span className="text-3xl text-indigo-300">&#9835;</span>
+        <div className="hidden w-36 flex-shrink-0 items-center justify-center bg-gradient-to-br from-indigo-900 to-purple-900 sm:flex">
+          <span className="text-3xl text-purple-300/50">&#9835;</span>
         </div>
       )}
 
@@ -31,7 +34,7 @@ export function EventCard({ event }: { event: UnifiedEvent }) {
           )}
         </div>
 
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-gray-500">
           {event.venue.name}
           {event.venue.city && ` \u2022 ${event.venue.city}`}
           {event.venue.state && `, ${event.venue.state}`}
@@ -64,7 +67,7 @@ export function EventCard({ event }: { event: UnifiedEvent }) {
               href={event.ticketUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-700"
+              className="rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-1.5 text-xs font-medium text-white shadow-sm transition-all hover:from-indigo-700 hover:to-purple-700 hover:shadow-md"
             >
               Get Tickets
             </a>
