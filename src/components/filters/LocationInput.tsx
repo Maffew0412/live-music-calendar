@@ -11,6 +11,11 @@ export function LocationInput() {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { data: suggestions } = useGeocode(debouncedInput);
 
+  // Sync input field when city toggle changes the filter location
+  useEffect(() => {
+    setInput(filters.location);
+  }, [filters.location]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       if (input.length > 2 && !isZipCode(input)) {
