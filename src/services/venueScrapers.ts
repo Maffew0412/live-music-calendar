@@ -215,11 +215,61 @@ async function scrapeCanopyClub(): Promise<UnifiedEvent[]> {
   } catch { return []; }
 }
 
+// ── Springfield: The Pageant, St. Louis MO ──
+
+interface PageantEvent {
+  title: string;
+  url: string;
+  date: string;
+  time: string;
+  price: string;
+  venue: string;
+}
+
+async function scrapeThePageant(): Promise<UnifiedEvent[]> {
+  try {
+    const url = isDev ? '/api/thepageant/' : '/api/thepageant';
+    const response = await fetch(url);
+    if (!response.ok) return [];
+
+    const data: { events: PageantEvent[] } = await response.json();
+    const today = new Date().toISOString().slice(0, 10);
+
+    return (data.events ?? [])
+      .filter((e) => e.date >= today)
+      .map((e): UnifiedEvent => {
+        // The Pageant complex has three stages — use correct coords for each
+        const venueDetails: Record<string, { lat: number; lng: number; address: string }> = {
+          'Delmar Hall': { lat: 38.6544, lng: -90.2897, address: '6133 Delmar Blvd, St. Louis, MO 63112' },
+          'Blueberry Hill Duck Room': { lat: 38.6488, lng: -90.2912, address: '6504 Delmar Blvd, St. Louis, MO 63130' },
+        };
+        const details = venueDetails[e.venue] ?? { lat: 38.6488, lng: -90.2912, address: '6161 Delmar Blvd, St. Louis, MO 63112' };
+        const venueName = e.venue || 'The Pageant';
+
+        return {
+          id: `venue_pageant_${e.date}_${e.title.slice(0, 20).replace(/\W/g, '')}`,
+          source: 'venue-scraper' as UnifiedEvent['source'],
+          name: e.title,
+          artistName: e.title.split(/[/,–]/)[0].trim(),
+          artistImageUrl: null,
+          venue: { name: venueName, city: 'St. Louis', state: 'MO', country: 'US', latitude: details.lat, longitude: details.lng, address: details.address },
+          dateTime: `${e.date}T${e.time}:00`,
+          localDate: e.date,
+          localTime: e.time,
+          genres: [],
+          ticketUrl: e.url,
+          priceRange: e.price ? { min: parseFloat(e.price.replace(/[^0-9.]/g, '')), max: parseFloat(e.price.replace(/[^0-9.]/g, '')), currency: 'USD' } : null,
+          status: 'onsale',
+        };
+      });
+  } catch { return []; }
+}
+
 // ── Export ──
 
 export async function scrapeAllVenues(city: CityKey = 'boston'): Promise<UnifiedEvent[]> {
   const scrapers = city === 'springfield'
-    ? [scrapeCastleTheatre(), scrapeCanopyClub()]
+    ? [scrapeCastleTheatre(), scrapeCanopyClub(), scrapeThePageant()]
     : [scrapeFaces(), scrapeOBriens(), scrapeTheMet()];
 
   const results = await Promise.allSettled(scrapers);

@@ -51,6 +51,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/canopyclub/, ''),
       },
+      '/api/thepageant': {
+        target: 'https://www.thepageant.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/thepageant/, ''),
+      },
     },
   },
 })

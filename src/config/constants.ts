@@ -42,7 +42,7 @@ export const CITY_PROFILES = {
     priorityVenues: [
       { query: 'Castle Theatre Bloomington', lat: 40.4842, lng: -88.9937 },
       { query: 'Canopy Club Champaign', lat: 40.1164, lng: -88.2434 },
-      { query: 'Delmar Hall St Louis', lat: 38.6544, lng: -90.2897 },
+      { query: 'The Pageant St Louis', lat: 38.6488, lng: -90.2912 },
     ],
   },
 } as const;
