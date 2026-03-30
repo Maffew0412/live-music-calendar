@@ -20,6 +20,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       scrapeDanneberger(),
       scrapeTheRailyard(),
       scrapeHarvestMarket(),
+      scrapeMotorheads(),
     ]);
 
     const events: ParsedEvent[] = results
@@ -161,50 +162,67 @@ function scrapeLinksFromHTML(
 
 // ── Boondocks ──
 // 2909 N Dirksen Pkwy, Springfield, IL 62702
-// Uses ETIX ticketing — try their calendar page for embedded event links
+// WordPress + RockHouse Partners (ETIX) plugin — NOT Tribe Events Calendar
+// Events page: /events/  Date format: <span class="eventMonth">Apr</span><span class="eventDay">24</span>
 
 async function scrapeBoondocks(): Promise<ParsedEvent[]> {
-  const tribe = await tryTribeAPI('https://theboondockspub.com', 'Boondocks');
-  if (tribe?.length) return tribe;
-
   try {
-    // ETIX venues often embed a widget; try fetching the events/calendar page
-    for (const path of ['/calendar', '/events', '/shows', '/']) {
-      const resp = await fetch(`https://theboondockspub.com${path}`, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HubLive/1.0)' },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!resp.ok) continue;
-      const html = await resp.text();
+    const resp = await fetch('https://theboondockspub.com/events/', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HubLive/1.0)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return [];
+    const html = await resp.text();
 
-      // Look for ETIX event links
-      const etixPattern = /<a[^>]+href="(https?:\/\/(?:www\.)?etix\.com\/ticket\/[^"]+)"[^>]*>([^<]{3,120})<\/a>/gi;
-      const etixEvents = scrapeLinksFromHTML(html, etixPattern, 'Boondocks');
-      if (etixEvents.length) return etixEvents;
+    const events: ParsedEvent[] = [];
+    const seen = new Set<string>();
+    const today = new Date().toISOString().slice(0, 10);
+    const currentYear = new Date().getFullYear();
 
-      // Look for internal event links
-      const pattern = /<a[^>]+href="(https?:\/\/(?:www\.)?theboondockspub\.com\/(?:event|show|ticket)[^"]*)"[^>]*>([^<]{3,100})<\/a>/gi;
-      const results = scrapeLinksFromHTML(html, pattern, 'Boondocks');
-      if (results.length) return results;
+    // RockHouse Partners event wrapper pattern
+    // Find each eventWrapper block (take up to 1500 chars per block)
+    const wrapperRe = /class="eventWrapper"([\s\S]{0,1500}?)(?=class="eventWrapper"|<\/section|<\/main|$)/g;
+    let wrapper;
+    while ((wrapper = wrapperRe.exec(html)) !== null) {
+      const block = wrapper[1];
 
-      // Look for any event-like title + date pairs in the page
-      const titlePattern = /<(?:h[1-4]|strong)[^>]*>([^<]{5,100})<\/(?:h[1-4]|strong)>/gi;
-      const today = new Date().toISOString().slice(0, 10);
-      const titles: { title: string; idx: number }[] = [];
-      let tm;
-      while ((tm = titlePattern.exec(html)) !== null) {
-        titles.push({ title: tm[1].trim(), idx: tm.index });
-      }
-      const found: ParsedEvent[] = [];
-      for (const { title, idx } of titles) {
-        const ctx = html.slice(idx, idx + 400);
-        const date = parseDateFromContext(ctx);
-        if (!date || date < today) continue;
-        found.push({ title, url: `https://theboondockspub.com${path}`, date, time: parseTime(ctx), price: parsePrice(ctx), venueName: 'Boondocks' });
-      }
-      if (found.length) return found;
+      // Extract month abbreviation and day number
+      const monthMatch = block.match(/class="[^"]*eventMonth[^"]*"[^>]*>([A-Za-z]+)<\/span>/i);
+      const dayMatch   = block.match(/class="[^"]*eventDay[^"]*"[^>]*>(\d+)<\/span>/i);
+      if (!monthMatch || !dayMatch) continue;
+
+      const mo = SHORT_MONTHS[monthMatch[1].toLowerCase().slice(0, 3)];
+      if (!mo) continue;
+      const dd = dayMatch[1].padStart(2, '0');
+
+      // Infer year
+      let year = currentYear;
+      const candidate = `${year}-${mo}-${dd}`;
+      if (candidate < today) year = currentYear + 1;
+      const date = `${year}-${mo}-${dd}`;
+      if (date < today) continue;
+
+      // Extract event title from <h3><a href="...">Title</a></h3>
+      const titleMatch = block.match(/<h3[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([^<]{2,100})<\/a>/i);
+      if (!titleMatch) continue;
+      const eventUrl  = titleMatch[1];
+      const title     = titleMatch[2].trim().replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+      if (!title || seen.has(title.toLowerCase())) continue;
+      seen.add(title.toLowerCase());
+
+      // Extract ETIX ticket URL if present, otherwise use the event permalink
+      const etixMatch = block.match(/href="(https?:\/\/(?:www\.)?etix\.com\/ticket\/[^"]+)"/i);
+      const ticketUrl = etixMatch ? etixMatch[1] : eventUrl;
+
+      // Extract price from block
+      const price = parsePrice(block);
+
+      // Extract door/show time
+      const time = parseTime(block);
+
+      events.push({ title, url: ticketUrl, date, time, price, venueName: 'Boondocks' });
     }
-    return [];
+    return events;
   } catch { return []; }
 }
 
@@ -565,5 +583,55 @@ async function scrapeHarvestMarket(): Promise<ParsedEvent[]> {
 
     const pattern = /<a[^>]+href="(https?:\/\/(?:www\.)?goharvestmarket\.com\/(?:event|events?)[^"]+)"[^>]*>([^<]{3,100})<\/a>/gi;
     return scrapeLinksFromHTML(html, pattern, 'Harvest Market Farmhouse Brews');
+  } catch { return []; }
+}
+
+// ── Route 66 Motorheads (The Motordome) ──
+// 600 Toronto Road, Springfield, IL 62711
+// WordPress + Custom Facebook Feed Pro — events server-rendered as .cff-upcoming-event divs
+// Title in .cff-event-title a, date in data-cff-timestamp (Unix) + .cff-start-date
+
+async function scrapeMotorheads(): Promise<ParsedEvent[]> {
+  try {
+    const resp = await fetch('https://66motorheads.com/events/', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HubLive/1.0)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return [];
+    const html = await resp.text();
+
+    const events: ParsedEvent[] = [];
+    const seen = new Set<string>();
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Each upcoming event is a .cff-upcoming-event div with data-cff-timestamp
+    const itemRe = /class="[^"]*cff-upcoming-event[^"]*"[\s\S]{0,2000}?(?=class="[^"]*cff-item|<\/ul|$)/g;
+    let item;
+    while ((item = itemRe.exec(html)) !== null) {
+      const block = item[0];
+
+      // Unix timestamp → date string
+      const tsMatch = block.match(/data-cff-timestamp="(\d+)"/);
+      if (!tsMatch) continue;
+      const date = new Date(parseInt(tsMatch[1]) * 1000).toISOString().slice(0, 10);
+      if (date < today) continue;
+
+      // Title from .cff-event-title a
+      const titleMatch = block.match(/class="cff-event-title"[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+      if (!titleMatch) continue;
+      const fbUrl = titleMatch[1];
+      const title = titleMatch[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      if (!title || title.length < 3) continue;
+      if (seen.has(title.toLowerCase())) continue;
+      seen.add(title.toLowerCase());
+
+      // Time from .cff-start-date: "<k>Apr 25, </k>8:00pm"
+      const timeMatch = block.match(/class="cff-start-date"[^>]*>(?:<[^>]+>)?[^<]*<\/[^>]+>([^<]+)</i);
+      const rawTime = timeMatch ? timeMatch[1].trim() : '';
+      const time = rawTime ? parseTime(rawTime) : '20:00';
+
+      events.push({ title, url: fbUrl, date, time, price: '', venueName: 'Route 66 Motorheads' });
+    }
+    return events;
   } catch { return []; }
 }

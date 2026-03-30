@@ -500,6 +500,7 @@ const SPR_VENUE_COORDS: Record<string, { lat: number; lng: number; address: stri
   'Danneberger Family Vineyards': { lat: 39.7126, lng: -89.8789, address: '12341 Irish Rd, New Berlin, IL 62670', city: 'New Berlin', state: 'IL' },
   'The Railyard on Route 66':       { lat: 39.7724, lng: -89.6495, address: '2242 S 6th St, Springfield, IL 62703', city: 'Springfield', state: 'IL' },
   'Harvest Market Farmhouse Brews': { lat: 39.7650, lng: -89.7093, address: '3001 S Veterans Pkwy, Springfield, IL 62704', city: 'Springfield', state: 'IL' },
+  'Route 66 Motorheads':            { lat: 39.7817, lng: -89.6738, address: '600 Toronto Road, Springfield, IL 62711', city: 'Springfield', state: 'IL' },
 };
 
 async function scrapeSpringfieldVenues(): Promise<UnifiedEvent[]> {
