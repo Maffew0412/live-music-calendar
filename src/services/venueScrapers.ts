@@ -317,11 +317,63 @@ async function scrapeThePageant(): Promise<UnifiedEvent[]> {
   } catch { return []; }
 }
 
+// ── Springfield: Local Springfield IL venues ──
+
+interface SPRVenueEvent {
+  title: string;
+  url: string;
+  date: string;
+  time: string;
+  price: string;
+  venueName: string;
+}
+
+const SPR_VENUE_COORDS: Record<string, { lat: number; lng: number; address: string; city: string; state: string }> = {
+  'Boondocks':                    { lat: 39.8200, lng: -89.6600, address: '2909 N Dirksen Pkwy, Springfield, IL 62702', city: 'Springfield', state: 'IL' },
+  'Bank of Springfield Center':   { lat: 39.8011, lng: -89.6443, address: '1 Convention Center Plaza, Springfield, IL 62701', city: 'Springfield', state: 'IL' },
+  'UIS Performing Arts Center':   { lat: 39.7700, lng: -89.6300, address: '2200 Ernest Hemingway Dr, Springfield, IL 62703', city: 'Springfield', state: 'IL' },
+  'The Blue Grouch':              { lat: 39.7600, lng: -89.6500, address: '510 W Maple Ave S, Springfield, IL 62704', city: 'Springfield', state: 'IL' },
+  'The Shed':                     { lat: 39.8358, lng: -89.6373, address: '801 E Sangamon Ave, Springfield, IL 62794', city: 'Springfield', state: 'IL' },
+  'Danneberger Family Vineyards': { lat: 39.7126, lng: -89.8789, address: '12341 Irish Rd, New Berlin, IL 62670', city: 'New Berlin', state: 'IL' },
+};
+
+async function scrapeSpringfieldVenues(): Promise<UnifiedEvent[]> {
+  try {
+    const url = isDev ? '/api/sprvenues/' : '/api/sprvenues';
+    const response = await fetch(url);
+    if (!response.ok) return [];
+
+    const data: { events: SPRVenueEvent[] } = await response.json();
+    const today = new Date().toISOString().slice(0, 10);
+
+    return (data.events ?? [])
+      .filter((e) => e.date >= today)
+      .map((e): UnifiedEvent => {
+        const coords = SPR_VENUE_COORDS[e.venueName] ?? { lat: 39.7817, lng: -89.6501, address: 'Springfield, IL', city: 'Springfield', state: 'IL' };
+        return {
+          id: `venue_spr_${e.venueName.replace(/\W/g, '')}_${e.date}_${e.title.slice(0, 15).replace(/\W/g, '')}`,
+          source: 'venue-scraper' as UnifiedEvent['source'],
+          name: e.title,
+          artistName: e.title.split(/[/,–]/)[0].trim(),
+          artistImageUrl: null,
+          venue: { name: e.venueName, city: coords.city, state: coords.state, country: 'US', latitude: coords.lat, longitude: coords.lng, address: coords.address },
+          dateTime: `${e.date}T${e.time}:00`,
+          localDate: e.date,
+          localTime: e.time,
+          genres: [],
+          ticketUrl: e.url,
+          priceRange: e.price ? { min: parseFloat(e.price.replace(/[^0-9.]/g, '')), max: parseFloat(e.price.replace(/[^0-9.]/g, '')), currency: 'USD' } : null,
+          status: 'onsale',
+        };
+      });
+  } catch { return []; }
+}
+
 // ── Export ──
 
 export async function scrapeAllVenues(city: CityKey = 'boston'): Promise<UnifiedEvent[]> {
   const scrapers = city === 'springfield'
-    ? [scrapeCastleTheatre(), scrapeCanopyClub(), scrapeThePageant(), scrapeSTLVenues()]
+    ? [scrapeCastleTheatre(), scrapeCanopyClub(), scrapeThePageant(), scrapeSTLVenues(), scrapeSpringfieldVenues()]
     : [scrapeFaces(), scrapeOBriens(), scrapeTheMet()];
 
   const results = await Promise.allSettled(scrapers);

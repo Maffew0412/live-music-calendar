@@ -38,9 +38,10 @@ export const CITY_PROFILES = {
     coordinates: { lat: 39.7817, lng: -89.6501 },
     postalCode: '62701',
     subtitle: 'Discover live music across Central IL & St. Louis',
-    // Keep priority minimal — large STL venues come through TM; scrapers cover indie ones
+    // Keep priority minimal — large venues come through TM; scrapers cover the rest
     priorityVenues: [
-      { query: 'Castle Theatre Bloomington', lat: 40.4842, lng: -88.9937 },
+      { query: 'Boondocks Springfield Illinois', lat: 39.8200, lng: -89.6600 },
+      { query: 'Castle Theatre Bloomington Illinois', lat: 40.4842, lng: -88.9937 },
       { query: 'The Pageant St Louis', lat: 38.6488, lng: -90.2912 },
     ],
   },
