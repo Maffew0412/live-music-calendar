@@ -317,6 +317,62 @@ async function scrapeThePageant(): Promise<UnifiedEvent[]> {
   } catch { return []; }
 }
 
+// ── Springfield: Champaign-area venues ──
+
+interface ChamVenueEvent {
+  title: string;
+  url: string;
+  date: string;
+  time: string;
+  price: string;
+  venueName: string;
+}
+
+const CHAM_VENUE_COORDS: Record<string, { lat: number; lng: number; address: string; city: string; state: string }> = {
+  'State Farm Center':    { lat: 40.0962, lng: -88.2359, address: '1800 S 1st St, Champaign, IL 61820',      city: 'Champaign', state: 'IL' },
+  'The City Center':      { lat: 40.1167, lng: -88.2417, address: '505 S Chestnut St, Champaign, IL 61820',  city: 'Champaign', state: 'IL' },
+  'Virginia Theatre':     { lat: 40.1174, lng: -88.2420, address: '203 W Park Ave, Champaign, IL 61820',     city: 'Champaign', state: 'IL' },
+  'Rose Bowl Tavern':     { lat: 40.1129, lng: -88.2088, address: '106 N Race St, Urbana, IL 61801',         city: 'Urbana',    state: 'IL' },
+  'Orpheum Champaign':    { lat: 40.1195, lng: -88.2425, address: '346 N Neil St, Champaign, IL 61820',      city: 'Champaign', state: 'IL' },
+  'The Cadillac':         { lat: 40.4619, lng: -88.0977, address: '108 W State St, Paxton, IL 61960',        city: 'Paxton',    state: 'IL' },
+  'Cowboy Monkey':        { lat: 40.1163, lng: -88.2417, address: '6 E Taylor St, Champaign, IL 61820',      city: 'Champaign', state: 'IL' },
+  'The Space':            { lat: 40.1165, lng: -88.2428, address: '1 E Main St Ste 107, Champaign, IL 61820', city: 'Champaign', state: 'IL' },
+};
+
+async function scrapeChampaignVenues(): Promise<UnifiedEvent[]> {
+  try {
+    const url = isDev ? '/api/chamvenues/' : '/api/chamvenues';
+    const response = await fetch(url);
+    if (!response.ok) return [];
+
+    const data: { events: ChamVenueEvent[] } = await response.json();
+    const today = new Date().toISOString().slice(0, 10);
+
+    return (data.events ?? [])
+      .filter((e) => e.date >= today)
+      .map((e): UnifiedEvent => {
+        const coords = CHAM_VENUE_COORDS[e.venueName] ?? { lat: 40.1164, lng: -88.2434, address: 'Champaign, IL', city: 'Champaign', state: 'IL' };
+        return {
+          id: `venue_cham_${e.venueName.replace(/\W/g,'')}_${e.date}_${e.title.slice(0,15).replace(/\W/g,'')}`,
+          source: 'venue-scraper' as UnifiedEvent['source'],
+          name: e.title,
+          artistName: e.title.split(/[/,–]/)[0].trim(),
+          artistImageUrl: null,
+          venue: { name: e.venueName, city: coords.city, state: coords.state, country: 'US', latitude: coords.lat, longitude: coords.lng, address: coords.address },
+          dateTime: `${e.date}T${e.time}:00`,
+          localDate: e.date,
+          localTime: e.time,
+          genres: [],
+          ticketUrl: e.url,
+          priceRange: e.price && e.price !== 'Free'
+            ? { min: parseFloat(e.price.replace(/[^0-9.]/g,'')), max: parseFloat(e.price.replace(/[^0-9.]/g,'')), currency: 'USD' }
+            : null,
+          status: 'onsale',
+        };
+      });
+  } catch { return []; }
+}
+
 // ── Springfield: Peoria-area venues ──
 
 interface PeoriaVenueEvent {
@@ -480,7 +536,7 @@ async function scrapeSpringfieldVenues(): Promise<UnifiedEvent[]> {
 
 export async function scrapeAllVenues(city: CityKey = 'boston'): Promise<UnifiedEvent[]> {
   const scrapers = city === 'springfield'
-    ? [scrapeCastleTheatre(), scrapeCanopyClub(), scrapeThePageant(), scrapeSTLVenues(), scrapeSpringfieldVenues(), scrapeBloomingtonVenues(), scrapePeoriaVenues()]
+    ? [scrapeCastleTheatre(), scrapeCanopyClub(), scrapeThePageant(), scrapeSTLVenues(), scrapeSpringfieldVenues(), scrapeBloomingtonVenues(), scrapePeoriaVenues(), scrapeChampaignVenues()]
     : [scrapeFaces(), scrapeOBriens(), scrapeTheMet()];
 
   const results = await Promise.allSettled(scrapers);
