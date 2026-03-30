@@ -317,6 +317,62 @@ async function scrapeThePageant(): Promise<UnifiedEvent[]> {
   } catch { return []; }
 }
 
+// ── Springfield: Peoria-area venues ──
+
+interface PeoriaVenueEvent {
+  title: string;
+  url: string;
+  date: string;
+  time: string;
+  price: string;
+  venueName: string;
+}
+
+const PEORIA_VENUE_COORDS: Record<string, { lat: number; lng: number; address: string; city: string; state: string }> = {
+  'Revival Music Hall':                  { lat: 40.7300, lng: -89.5800, address: '3300 W Willow Knolls Dr, Peoria, IL 61614', city: 'Peoria', state: 'IL' },
+  'Peoria Civic Center':                 { lat: 40.6888, lng: -89.5898, address: '201 SW Jefferson Ave, Peoria, IL 61602', city: 'Peoria', state: 'IL' },
+  'CEFCU Center Stage at the Landing':   { lat: 40.6903, lng: -89.5858, address: '200 NE Water St, Peoria, IL 61602', city: 'Peoria', state: 'IL' },
+  'Rage Club':                           { lat: 40.7100, lng: -89.5900, address: '1114 N Institute Pl, Peoria, IL 61606', city: 'Peoria', state: 'IL' },
+  'Venue Chisca':                        { lat: 40.6940, lng: -89.5950, address: '1009 SW Washington St, Peoria, IL 61602', city: 'Peoria', state: 'IL' },
+  'The Neon Bison':                      { lat: 40.6940, lng: -89.5910, address: '617 Main St, Peoria, IL 61602', city: 'Peoria', state: 'IL' },
+  'Five Points Washington':              { lat: 40.7020, lng: -89.4070, address: '360 N Wilmor Rd, Washington, IL 61571', city: 'Washington', state: 'IL' },
+  'The 808 Room':                        { lat: 40.6490, lng: -89.5710, address: '808 Meadow Ave, East Peoria, IL 61611', city: 'East Peoria', state: 'IL' },
+};
+
+async function scrapePeoriaVenues(): Promise<UnifiedEvent[]> {
+  try {
+    const url = isDev ? '/api/peoriavenues/' : '/api/peoriavenues';
+    const response = await fetch(url);
+    if (!response.ok) return [];
+
+    const data: { events: PeoriaVenueEvent[] } = await response.json();
+    const today = new Date().toISOString().slice(0, 10);
+
+    return (data.events ?? [])
+      .filter((e) => e.date >= today)
+      .map((e): UnifiedEvent => {
+        const coords = PEORIA_VENUE_COORDS[e.venueName] ?? { lat: 40.6936, lng: -89.5890, address: 'Peoria, IL', city: 'Peoria', state: 'IL' };
+        return {
+          id: `venue_peoria_${e.venueName.replace(/\W/g, '')}_${e.date}_${e.title.slice(0, 15).replace(/\W/g, '')}`,
+          source: 'venue-scraper' as UnifiedEvent['source'],
+          name: e.title,
+          artistName: e.title.split(/[/,–]/)[0].trim(),
+          artistImageUrl: null,
+          venue: { name: e.venueName, city: coords.city, state: coords.state, country: 'US', latitude: coords.lat, longitude: coords.lng, address: coords.address },
+          dateTime: `${e.date}T${e.time}:00`,
+          localDate: e.date,
+          localTime: e.time,
+          genres: [],
+          ticketUrl: e.url,
+          priceRange: e.price && e.price !== 'Free'
+            ? { min: parseFloat(e.price.replace(/[^0-9.]/g, '')), max: parseFloat(e.price.replace(/[^0-9.]/g, '')), currency: 'USD' }
+            : null,
+          status: 'onsale',
+        };
+      });
+  } catch { return []; }
+}
+
 // ── Springfield: Bloomington-area venues ──
 
 interface BloomVenueEvent {
@@ -424,7 +480,7 @@ async function scrapeSpringfieldVenues(): Promise<UnifiedEvent[]> {
 
 export async function scrapeAllVenues(city: CityKey = 'boston'): Promise<UnifiedEvent[]> {
   const scrapers = city === 'springfield'
-    ? [scrapeCastleTheatre(), scrapeCanopyClub(), scrapeThePageant(), scrapeSTLVenues(), scrapeSpringfieldVenues(), scrapeBloomingtonVenues()]
+    ? [scrapeCastleTheatre(), scrapeCanopyClub(), scrapeThePageant(), scrapeSTLVenues(), scrapeSpringfieldVenues(), scrapeBloomingtonVenues(), scrapePeoriaVenues()]
     : [scrapeFaces(), scrapeOBriens(), scrapeTheMet()];
 
   const results = await Promise.allSettled(scrapers);
