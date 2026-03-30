@@ -18,6 +18,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       scrapeBlueGrouch(),
       scrapeTheShed(),
       scrapeDanneberger(),
+      scrapeTheRailyard(),
     ]);
 
     const events: ParsedEvent[] = results
@@ -39,8 +40,14 @@ const MONTHS: Record<string, string> = {
   september: '09', october: '10', november: '11', december: '12',
 };
 
+const SHORT_MONTHS: Record<string, string> = {
+  jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+  jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+};
+
 function parseDateFromContext(ctx: string): string | null {
   const today = new Date().toISOString().slice(0, 10);
+  const currentYear = new Date().getFullYear();
 
   // "March 31, 2026" / "March 31 2026"
   const m1 = ctx.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s*(\d{4})/i);
@@ -68,6 +75,17 @@ function parseDateFromContext(ctx: string): string | null {
     const year = m3[3].length === 2 ? `20${m3[3]}` : m3[3];
     const d = `${year}-${m3[1].padStart(2, '0')}-${m3[2].padStart(2, '0')}`;
     return d >= today ? d : null;
+  }
+
+  // "Sat Apr 11" / "Fri May 8" — short month, no year (infer current or next year)
+  const m4 = ctx.match(/(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})/i);
+  if (m4) {
+    const mo = SHORT_MONTHS[m4[1].toLowerCase()];
+    if (mo) {
+      const candidate = `${currentYear}-${mo}-${m4[2].padStart(2, '0')}`;
+      if (candidate >= today) return candidate;
+      return `${currentYear + 1}-${mo}-${m4[2].padStart(2, '0')}`;
+    }
   }
 
   return null;
@@ -351,47 +369,152 @@ async function scrapeTheShed(): Promise<ParsedEvent[]> {
 
 // ── Danneberger Family Vineyards ──
 // 12341 Irish Road, New Berlin, IL 62670
-// Uses See Tickets (seetickets.us) widget
+// Events live on the homepage as direct wl.seetickets.us links
+// Dates appear as "Sat Apr 11" / "Fri May 8" in surrounding context
 
 async function scrapeDanneberger(): Promise<ParsedEvent[]> {
-  // Try their main events page first
-  for (const url of [
-    'https://danenbergerfamilyvineyards.com/events',
-    'https://danenbergerfamilyvineyards.com/wine-rocks',
-    'https://danenbergerfamilyvineyards.com',
-  ]) {
-    try {
-      const resp = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HubLive/1.0)' },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!resp.ok) continue;
-      const html = await resp.text();
+  try {
+    const resp = await fetch('https://danenbergerfamilyvineyards.com/', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HubLive/1.0)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return [];
+    const html = await resp.text();
 
-      // See Tickets widget iframe — extract the src URL if present
-      const seeTicketsMatch = html.match(/src="(https?:\/\/(?:www\.)?seetickets\.us\/[^"]+)"/i);
-      if (seeTicketsMatch) {
-        const ticketResp = await fetch(seeTicketsMatch[1], {
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HubLive/1.0)' },
-          signal: AbortSignal.timeout(7000),
-        });
-        if (ticketResp.ok) {
-          const ticketHTML = await ticketResp.text();
-          const pattern = /<a[^>]+href="(https?:\/\/(?:www\.)?seetickets\.us\/event\/[^"]+)"[^>]*>([^<]{3,100})<\/a>/gi;
-          const results = scrapeLinksFromHTML(ticketHTML, pattern, 'Danneberger Family Vineyards');
-          if (results.length) return results;
+    const events: ParsedEvent[] = [];
+    const seen = new Set<string>();
+
+    // Events are hardcoded wl.seetickets.us anchor links in the homepage HTML
+    const pattern = /<a[^>]+href="(https?:\/\/wl\.seetickets\.us\/event\/[^"]+)"[^>]*>([^<]{3,120})<\/a>/gi;
+    let match;
+    while ((match = pattern.exec(html)) !== null) {
+      const url = match[1].split('?')[0]; // strip affiliate query params
+      const rawTitle = match[2].trim().replace(/&amp;/g, '&').replace(/&#\d+;/g, '').replace(/\s+/g, ' ');
+      if (!rawTitle || rawTitle.length < 3) continue;
+      if (seen.has(rawTitle.toLowerCase())) continue;
+      seen.add(rawTitle.toLowerCase());
+
+      const ctx = html.slice(Math.max(0, match.index - 400), match.index + match[0].length + 400);
+      const date = parseDateFromContext(ctx);
+      if (!date) continue;
+
+      events.push({
+        title: rawTitle,
+        url,
+        date,
+        time: parseTime(ctx),
+        price: parsePrice(ctx),
+        venueName: 'Danneberger Family Vineyards',
+      });
+    }
+    return events;
+  } catch { return []; }
+}
+
+// ── The Railyard on Route 66 ──
+// 2242 S 6th St, Springfield, IL 62703
+// Square Online SPA — events stored in window.__BOOTSTRAP_STATE__ JSON (quill delta format)
+
+async function scrapeTheRailyard(): Promise<ParsedEvent[]> {
+  try {
+    const resp = await fetch('https://www.therailyardon66.com/events', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HubLive/1.0)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return [];
+    const html = await resp.text();
+
+    // Square Online embeds all page data in window.__BOOTSTRAP_STATE__
+    const assignIdx = html.indexOf('window.__BOOTSTRAP_STATE__');
+    if (assignIdx === -1) return [];
+    const jsonStart = html.indexOf('{', assignIdx);
+    const scriptEnd = html.indexOf('</script>', jsonStart);
+    if (jsonStart === -1 || scriptEnd === -1) return [];
+
+    const rawJson = html.slice(jsonStart, scriptEnd).replace(/;\s*$/, '').trimEnd();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let bootstrap: any;
+    try { bootstrap = JSON.parse(rawJson); } catch { return []; }
+
+    // Navigate to quill ops — path may shift; try a few common locations
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function findOps(obj: any): Array<{ insert: unknown }> | null {
+      if (!obj || typeof obj !== 'object') return null;
+      if (Array.isArray(obj?.ops) && obj.ops.length > 0 && typeof obj.ops[0]?.insert === 'string') {
+        const text = obj.ops.map((o: { insert: unknown }) => (typeof o.insert === 'string' ? o.insert : '')).join('');
+        if (/(?:january|february|march|april|may|june|july|august|september|october|november|december)/i.test(text)) {
+          return obj.ops;
         }
       }
+      for (const key of Object.keys(obj)) {
+        const result = findOps(obj[key]);
+        if (result) return result;
+      }
+      return null;
+    }
 
-      // Look for embedded event data or Tribe
-      const tribe = await tryTribeAPI(new URL(url).origin, 'Danneberger Family Vineyards');
-      if (tribe?.length) return tribe;
+    const ops = findOps(bootstrap);
+    if (!ops) return [];
 
-      // Generic event links
-      const pattern = /<a[^>]+href="(https?:\/\/danenbergerfamilyvineyards\.com\/(?:event|show|concerts?|wine-rocks)[^"]*)"[^>]*>([^<]{3,100})<\/a>/gi;
-      const results = scrapeLinksFromHTML(html, pattern, 'Danneberger Family Vineyards');
-      if (results.length) return results;
-    } catch { continue; }
-  }
-  return [];
+    const text = ops
+      .filter((op) => typeof op.insert === 'string')
+      .map((op) => op.insert as string)
+      .join('');
+
+    const monthMap: Record<string, string> = {
+      january: '01', february: '02', march: '03', april: '04',
+      may: '05', june: '06', july: '07', august: '08',
+      september: '09', october: '10', november: '11', december: '12',
+    };
+
+    const events: ParsedEvent[] = [];
+    const today = new Date().toISOString().slice(0, 10);
+    const currentYear = new Date().getFullYear();
+    let currentMonth = '';
+
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Month header: "MARCH:" or "APRIL:"
+      const monthMatch = trimmed.match(/^(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER):?\s*$/i);
+      if (monthMatch) {
+        currentMonth = monthMatch[1].toLowerCase();
+        continue;
+      }
+
+      if (!currentMonth) continue;
+
+      // Event line: "13th & 14th: EVENT NAME" or "27th & 28th - EVENT NAME"
+      const eventMatch = trimmed.match(/^(\d{1,2})(?:st|nd|rd|th)(?:\s*(?:[&–-])\s*\d{1,2}(?:st|nd|rd|th))?(?:\s*[-:(]\s*)(.{3,})/i);
+      if (!eventMatch) continue;
+
+      const day = eventMatch[1].padStart(2, '0');
+      const title = eventMatch[2].replace(/[)]+$/, '').replace(/\s+/g, ' ').trim();
+      if (!title || title.length < 3) continue;
+
+      // Filter to music-relevant events
+      const isMusicEvent = /blues|punk|rock|jazz|country|folk|music|dj\b|band|tribute|concert|open.?mic|soul|hip.?hop|metal|indie|swifties|era.?night|halloween/i.test(title);
+      if (!isMusicEvent) continue;
+
+      const mo = monthMap[currentMonth];
+      if (!mo) continue;
+
+      let year = currentYear;
+      const candidate = `${year}-${mo}-${day}`;
+      if (candidate < today) year = currentYear + 1;
+      const date = `${year}-${mo}-${day}`;
+      if (date < today) continue;
+
+      events.push({
+        title,
+        url: 'https://www.therailyardon66.com/events',
+        date,
+        time: '18:00',
+        price: '',
+        venueName: 'The Railyard on Route 66',
+      });
+    }
+    return events;
+  } catch { return []; }
 }
