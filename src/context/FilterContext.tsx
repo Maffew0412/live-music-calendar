@@ -1,11 +1,19 @@
 import { createContext, useReducer, type ReactNode } from 'react';
 import type { SearchFilters, FilterAction } from '../types/filters';
-import { DEFAULT_LOCATION } from '../config/constants';
+import { CITY_PROFILES, type CityKey } from '../config/constants';
+
+function cityDefaults(city: CityKey): Pick<SearchFilters, 'activeCity' | 'location' | 'coordinates' | 'postalCode'> {
+  const profile = CITY_PROFILES[city];
+  return {
+    activeCity: city,
+    location: profile.name,
+    coordinates: profile.coordinates,
+    postalCode: profile.postalCode,
+  };
+}
 
 const initialFilters: SearchFilters = {
-  location: DEFAULT_LOCATION.name,
-  coordinates: DEFAULT_LOCATION.coordinates,
-  postalCode: DEFAULT_LOCATION.postalCode,
+  ...cityDefaults('boston'),
   radius: 100,
   genres: [],
   excludedVenues: [],
@@ -16,6 +24,16 @@ const initialFilters: SearchFilters = {
 
 function filterReducer(state: SearchFilters, action: FilterAction): SearchFilters {
   switch (action.type) {
+    case 'SET_CITY': {
+      return {
+        ...state,
+        ...cityDefaults(action.payload),
+        genres: [],
+        excludedVenues: [],
+        dateRange: null,
+        page: 0,
+      };
+    }
     case 'SET_LOCATION':
       return {
         ...state,

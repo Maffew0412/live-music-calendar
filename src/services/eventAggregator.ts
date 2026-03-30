@@ -18,7 +18,7 @@ export async function searchEvents(filters: SearchFilters): Promise<SearchResult
   const [tmResult, phqEvents, venueEvents] = await Promise.all([
     searchTicketmaster(filters),
     searchPredictHQ(filters).catch(() => [] as UnifiedEvent[]),
-    scrapeAllVenues().catch(() => [] as UnifiedEvent[]),
+    scrapeAllVenues(filters.activeCity).catch(() => [] as UnifiedEvent[]),
   ]);
 
   // Supplement: Bandsintown for top unique artists (non-blocking enrichment)

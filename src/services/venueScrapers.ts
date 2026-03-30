@@ -1,8 +1,20 @@
 import type { UnifiedEvent } from '../types/event';
+import type { CityKey } from '../config/constants';
 
 const isDev = import.meta.env.DEV;
 
-// ── Faces Brewing (Squarespace JSON) ──
+// ── Shared ──
+
+interface ScrapedEvent {
+  title: string;
+  url: string;
+  date: string;
+  time: string;
+  genre?: string;
+  price?: string;
+}
+
+// ── Boston: Faces Brewing (Squarespace JSON) ──
 
 interface SquarespaceItem {
   id: string;
@@ -79,16 +91,7 @@ async function scrapeFaces(): Promise<UnifiedEvent[]> {
   } catch { return []; }
 }
 
-// ── O'Brien's Pub (serverless HTML scraper) ──
-
-interface ScrapedEvent {
-  title: string;
-  url: string;
-  date: string;
-  time: string;
-  genre?: string;
-  price?: string;
-}
+// ── Boston: O'Brien's Pub (serverless HTML scraper) ──
 
 async function scrapeOBriens(): Promise<UnifiedEvent[]> {
   try {
@@ -119,7 +122,7 @@ async function scrapeOBriens(): Promise<UnifiedEvent[]> {
   } catch { return []; }
 }
 
-// ── The Met RI (serverless HTML scraper) ──
+// ── Boston: The Met RI (serverless HTML scraper) ──
 
 async function scrapeTheMet(): Promise<UnifiedEvent[]> {
   try {
@@ -150,14 +153,76 @@ async function scrapeTheMet(): Promise<UnifiedEvent[]> {
   } catch { return []; }
 }
 
+// ── Springfield: Castle Theatre, Bloomington IL ──
+
+async function scrapeCastleTheatre(): Promise<UnifiedEvent[]> {
+  try {
+    const url = isDev ? '/api/castletheatre/' : '/api/castletheatre';
+    const response = await fetch(url);
+    if (!response.ok) return [];
+
+    const data: { events: ScrapedEvent[] } = await response.json();
+    const today = new Date().toISOString().slice(0, 10);
+
+    return (data.events ?? [])
+      .filter((e) => e.date >= today)
+      .map((e): UnifiedEvent => ({
+        id: `venue_castle_${e.date}_${e.title.slice(0, 20).replace(/\W/g, '')}`,
+        source: 'venue-scraper' as UnifiedEvent['source'],
+        name: e.title,
+        artistName: e.title.split(/[/,–-]/)[0].trim(),
+        artistImageUrl: null,
+        venue: { name: 'Castle Theatre', city: 'Bloomington', state: 'IL', country: 'US', latitude: 40.4842, longitude: -88.9937, address: '209 E Washington St, Bloomington, IL 61701' },
+        dateTime: `${e.date}T${e.time}:00`,
+        localDate: e.date,
+        localTime: e.time,
+        genres: e.genre ? [e.genre] : [],
+        ticketUrl: e.url,
+        priceRange: e.price ? { min: parseFloat(e.price.replace(/[^0-9.]/g, '')), max: parseFloat(e.price.replace(/[^0-9.]/g, '')), currency: 'USD' } : null,
+        status: 'onsale',
+      }));
+  } catch { return []; }
+}
+
+// ── Springfield: Canopy Club, Champaign IL ──
+
+async function scrapeCanopyClub(): Promise<UnifiedEvent[]> {
+  try {
+    const url = isDev ? '/api/canopyclub/' : '/api/canopyclub';
+    const response = await fetch(url);
+    if (!response.ok) return [];
+
+    const data: { events: ScrapedEvent[] } = await response.json();
+    const today = new Date().toISOString().slice(0, 10);
+
+    return (data.events ?? [])
+      .filter((e) => e.date >= today)
+      .map((e): UnifiedEvent => ({
+        id: `venue_canopy_${e.date}_${e.title.slice(0, 20).replace(/\W/g, '')}`,
+        source: 'venue-scraper' as UnifiedEvent['source'],
+        name: e.title,
+        artistName: e.title.split(/[/,–-]/)[0].trim(),
+        artistImageUrl: null,
+        venue: { name: 'Canopy Club', city: 'Champaign', state: 'IL', country: 'US', latitude: 40.1164, longitude: -88.2434, address: '708 S Goodwin Ave, Urbana, IL 61801' },
+        dateTime: `${e.date}T${e.time}:00`,
+        localDate: e.date,
+        localTime: e.time,
+        genres: e.genre ? [e.genre] : [],
+        ticketUrl: e.url,
+        priceRange: e.price ? { min: parseFloat(e.price.replace(/[^0-9.]/g, '')), max: parseFloat(e.price.replace(/[^0-9.]/g, '')), currency: 'USD' } : null,
+        status: 'onsale',
+      }));
+  } catch { return []; }
+}
+
 // ── Export ──
 
-export async function scrapeAllVenues(): Promise<UnifiedEvent[]> {
-  const results = await Promise.allSettled([
-    scrapeFaces(),
-    scrapeOBriens(),
-    scrapeTheMet(),
-  ]);
+export async function scrapeAllVenues(city: CityKey = 'boston'): Promise<UnifiedEvent[]> {
+  const scrapers = city === 'springfield'
+    ? [scrapeCastleTheatre(), scrapeCanopyClub()]
+    : [scrapeFaces(), scrapeOBriens(), scrapeTheMet()];
+
+  const results = await Promise.allSettled(scrapers);
 
   return results
     .filter((r): r is PromiseFulfilledResult<UnifiedEvent[]> => r.status === 'fulfilled')

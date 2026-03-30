@@ -6,7 +6,7 @@ export function useEventSearch() {
   const { filters } = useFilters();
 
   return useQuery({
-    queryKey: ['events', filters.location, filters.radius, filters.genres, filters.dateRange, filters.page],
+    queryKey: ['events', filters.activeCity, filters.location, filters.radius, filters.genres, filters.dateRange, filters.page],
     queryFn: () => searchEvents(filters),
     enabled: !!(filters.coordinates || filters.postalCode),
     staleTime: 5 * 60 * 1000, // 5 minutes

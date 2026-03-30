@@ -1,4 +1,7 @@
+import type { CityKey } from '../config/constants';
+
 export interface SearchFilters {
+  activeCity: CityKey;
   location: string;
   coordinates: { lat: number; lng: number } | null;
   postalCode: string | null;
@@ -11,6 +14,7 @@ export interface SearchFilters {
 }
 
 export type FilterAction =
+  | { type: 'SET_CITY'; payload: CityKey }
   | { type: 'SET_LOCATION'; payload: { location: string; coordinates?: { lat: number; lng: number } | null; postalCode?: string | null } }
   | { type: 'SET_RADIUS'; payload: number }
   | { type: 'TOGGLE_GENRE'; payload: string }

@@ -2,16 +2,10 @@ import type { PHQSearchResponse, PHQEvent } from '../types/api';
 import type { UnifiedEvent } from '../types/event';
 import type { SearchFilters } from '../types/filters';
 import { env } from '../config/env';
+import { CITY_PROFILES } from '../config/constants';
 
 const isDev = import.meta.env.DEV;
 const BASE_URL = isDev ? '/api/predicthq/v1/events/' : '/api/predicthq';
-
-// Priority venues — always fetch their events via text search + tight location
-const PRIORITY_VENUES = [
-  { query: 'Deep Cuts', lat: 42.4179, lng: -71.1102 },
-  { query: 'City Winery', lat: 42.364381, lng: -71.0586485 },
-  { query: 'Royale Boston', lat: 42.3566466, lng: -71.1439322 },
-];
 
 export async function searchPredictHQ(filters: SearchFilters): Promise<UnifiedEvent[]> {
   if (isDev && !env.predictHQToken) return [];
@@ -22,6 +16,9 @@ export async function searchPredictHQ(filters: SearchFilters): Promise<UnifiedEv
     Accept: 'application/json',
     ...(isDev && { Authorization: `Bearer ${env.predictHQToken}` }),
   };
+
+  // Use city-specific priority venues from the active profile
+  const priorityVenues = CITY_PROFILES[filters.activeCity].priorityVenues;
 
   // Run general search and priority venue searches in parallel
   const [generalEvents, ...priorityResults] = await Promise.all([
@@ -34,7 +31,7 @@ export async function searchPredictHQ(filters: SearchFilters): Promise<UnifiedEv
       sort: 'start',
       state: 'active',
     }, headers),
-    ...PRIORITY_VENUES.map((venue) =>
+    ...priorityVenues.map((venue) =>
       fetchPHQEvents({
         category: 'concerts',
         'start.gte': filters.dateRange?.start ?? today,

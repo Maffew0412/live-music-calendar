@@ -41,6 +41,16 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/themet/, ''),
       },
+      '/api/castletheatre': {
+        target: 'https://www.castletheatre.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/castletheatre/, ''),
+      },
+      '/api/canopyclub': {
+        target: 'https://www.canopyclub.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/canopyclub/, ''),
+      },
     },
   },
 })

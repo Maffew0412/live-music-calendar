@@ -16,7 +16,7 @@ L.Icon.Default.mergeOptions({
 });
 import { useEventSearch } from '../../hooks/useEventSearch';
 import { useFilters } from '../../hooks/useFilters';
-import { BOSTON_COORDS, ZOOM_FOR_RADIUS } from '../../config/constants';
+import { CITY_PROFILES, ZOOM_FOR_RADIUS } from '../../config/constants';
 import { EventMarker } from './EventMarker';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -26,10 +26,11 @@ function MapUpdater() {
   const { filters } = useFilters();
 
   useEffect(() => {
-    const center = filters.coordinates ?? BOSTON_COORDS;
+    const fallback = CITY_PROFILES[filters.activeCity].coordinates;
+    const center = filters.coordinates ?? fallback;
     const zoom = ZOOM_FOR_RADIUS[filters.radius] ?? 10;
     map.setView([center.lat, center.lng], zoom);
-  }, [map, filters.coordinates, filters.radius]);
+  }, [map, filters.coordinates, filters.radius, filters.activeCity]);
 
   return null;
 }
@@ -38,7 +39,8 @@ export function EventMap() {
   const { data, isLoading, isError, error } = useEventSearch();
   const { filters } = useFilters();
 
-  const center = filters.coordinates ?? BOSTON_COORDS;
+  const fallback = CITY_PROFILES[filters.activeCity].coordinates;
+  const center = filters.coordinates ?? fallback;
   const zoom = ZOOM_FOR_RADIUS[filters.radius] ?? 10;
 
   if (isLoading) return <LoadingSpinner />;
