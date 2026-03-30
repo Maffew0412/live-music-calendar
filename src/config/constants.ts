@@ -27,10 +27,9 @@ export const CITY_PROFILES = {
     coordinates: { lat: 42.3601, lng: -71.0589 },
     postalCode: '02101',
     subtitle: 'Discover live music across Greater Boston',
+    // Keep priority venues minimal — only for genuinely hard-to-find indie spots
     priorityVenues: [
-      { query: 'Deep Cuts', lat: 42.4179, lng: -71.1102 },
-      { query: 'City Winery', lat: 42.364381, lng: -71.0586485 },
-      { query: 'Royale Boston', lat: 42.3566466, lng: -71.1439322 },
+      { query: 'Deep Cuts Medford', lat: 42.4179, lng: -71.1102 },
     ],
   },
   springfield: {
@@ -39,9 +38,9 @@ export const CITY_PROFILES = {
     coordinates: { lat: 39.7817, lng: -89.6501 },
     postalCode: '62701',
     subtitle: 'Discover live music across Central IL & St. Louis',
+    // Keep priority minimal — large STL venues come through TM; scrapers cover indie ones
     priorityVenues: [
       { query: 'Castle Theatre Bloomington', lat: 40.4842, lng: -88.9937 },
-      { query: 'Canopy Club Champaign', lat: 40.1164, lng: -88.2434 },
       { query: 'The Pageant St Louis', lat: 38.6488, lng: -90.2912 },
     ],
   },
