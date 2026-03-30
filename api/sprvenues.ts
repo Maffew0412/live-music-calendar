@@ -19,6 +19,7 @@ export default async function handler(_req: VercelRequest, res: VercelResponse) 
       scrapeTheShed(),
       scrapeDanneberger(),
       scrapeTheRailyard(),
+      scrapeHarvestMarket(),
     ]);
 
     const events: ParsedEvent[] = results
@@ -283,43 +284,66 @@ async function scrapeUISPAC(): Promise<ParsedEvent[]> {
 
 // ── The Blue Grouch Pub ──
 // 510 W Maple Ave S, Springfield, IL 62704
-// Wix-based site
+// Wix Thunderbolt site — shows page uses Wix Pro Gallery widget (not Wix Events)
+// Events are stored as flyer PNG images; filenames encode date: "BG Artist MMDDYY.png"
 
 async function scrapeBlueGrouch(): Promise<ParsedEvent[]> {
-  const tribe = await tryTribeAPI('https://www.thebluegrouch.com', 'The Blue Grouch');
-  if (tribe?.length) return tribe;
-
   try {
-    for (const path of ['/events', '/shows', '/calendar', '/live-music']) {
-      const resp = await fetch(`https://www.thebluegrouch.com${path}`, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HubLive/1.0)' },
-        signal: AbortSignal.timeout(7000),
-      });
-      if (!resp.ok) continue;
-      const html = await resp.text();
+    const resp = await fetch('https://www.thebluegrouch.com/shows', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HubLive/1.0)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return [];
+    const html = await resp.text();
 
-      // Wix sites often embed event data as JSON in a script tag
-      const jsonMatch = html.match(/"events"\s*:\s*(\[[\s\S]{10,5000}?\])/);
-      if (jsonMatch) {
-        try {
-          const items = JSON.parse(jsonMatch[1]);
-          const today = new Date().toISOString().slice(0, 10);
-          const parsed: ParsedEvent[] = [];
-          for (const item of items) {
-            const title = (item.title ?? item.name ?? '').toString().trim();
-            const dateStr = (item.startDate ?? item.date ?? item.start ?? '').toString().slice(0, 10);
-            if (!title || !dateStr || dateStr < today) continue;
-            parsed.push({ title, url: item.eventUrl ?? item.url ?? `https://www.thebluegrouch.com${path}`, date: dateStr, time: (item.startDate ?? '').toString().slice(11, 16) || '20:00', price: '', venueName: 'The Blue Grouch' });
-          }
-          if (parsed.length) return parsed;
-        } catch { /* fall through */ }
+    // Wix embeds all page data in a script#wix-warmup-data JSON block
+    const warmupMatch = html.match(/<script[^>]+id="wix-warmup-data"[^>]*>([\s\S]*?)<\/script>/i);
+    if (!warmupMatch) return [];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let warmup: any;
+    try { warmup = JSON.parse(warmupMatch[1]); } catch { return []; }
+
+    // Events live in the Wix Pro Gallery app data under appsWarmupData
+    const appsData = warmup?.appsWarmupData ?? {};
+    const events: ParsedEvent[] = [];
+    const today = new Date().toISOString().slice(0, 10);
+
+    for (const appId of Object.keys(appsData)) {
+      const appData = appsData[appId];
+      for (const key of Object.keys(appData ?? {})) {
+        const galleryData = appData[key]?.items;
+        if (!Array.isArray(galleryData)) continue;
+
+        for (const item of galleryData) {
+          const fileName: string = item?.metaData?.fileName ?? item?.fileName ?? '';
+          if (!fileName) continue;
+
+          // Filename pattern: "BG Artist Name MMDDYY.png"
+          const m = fileName.match(/^BG\s+(.+?)\s+(\d{6})\.\w+$/i);
+          if (!m) continue;
+
+          const title = m[1].trim();
+          const raw = m[2]; // MMDDYY
+          const mm = raw.slice(0, 2);
+          const dd = raw.slice(2, 4);
+          const yy = raw.slice(4, 6);
+          const date = `20${yy}-${mm}-${dd}`;
+          if (date < today) continue;
+
+          events.push({
+            title,
+            url: 'https://www.thebluegrouch.com/shows',
+            date,
+            time: '21:00',
+            price: '',
+            venueName: 'The Blue Grouch',
+          });
+        }
+        if (events.length) return events;
       }
-
-      const pattern = /<a[^>]+href="(https?:\/\/(?:www\.)?thebluegrouch\.com\/[^"]*)"[^>]*>([^<]{3,100})<\/a>/gi;
-      const results = scrapeLinksFromHTML(html, pattern, 'The Blue Grouch');
-      if (results.length) return results;
     }
-    return [];
+    return events;
   } catch { return []; }
 }
 
@@ -385,7 +409,8 @@ async function scrapeDanneberger(): Promise<ParsedEvent[]> {
     const seen = new Set<string>();
 
     // Events are hardcoded wl.seetickets.us anchor links in the homepage HTML
-    const pattern = /<a[^>]+href="(https?:\/\/wl\.seetickets\.us\/event\/[^"]+)"[^>]*>([^<]{3,120})<\/a>/gi;
+    // Note: href values are UNQUOTED in their WP template (href=https://... with no quotes)
+    const pattern = /<a[^>]+href=["']?(https?:\/\/wl\.seetickets\.us\/event\/[^\s"'>]+)["']?[^>]*>([^<]{3,120})<\/a>/gi;
     let match;
     while ((match = pattern.exec(html)) !== null) {
       const url = match[1].split('?')[0]; // strip affiliate query params
@@ -516,5 +541,29 @@ async function scrapeTheRailyard(): Promise<ParsedEvent[]> {
       });
     }
     return events;
+  } catch { return []; }
+}
+
+// ── Harvest Market Farmhouse Brews ──
+// 3001 S Veterans Pkwy, Springfield, IL 62704
+// WordPress + Tribe Events Calendar Pro — live music Fri/Sat evenings
+
+async function scrapeHarvestMarket(): Promise<ParsedEvent[]> {
+  const tribe = await tryTribeAPI('https://www.goharvestmarket.com', 'Harvest Market Farmhouse Brews');
+  if (tribe?.length) return tribe;
+
+  try {
+    const resp = await fetch(
+      'https://www.goharvestmarket.com/events-at-our-niemann-harvest-market-store-in-springfield-il/',
+      {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HubLive/1.0)' },
+        signal: AbortSignal.timeout(8000),
+      }
+    );
+    if (!resp.ok) return [];
+    const html = await resp.text();
+
+    const pattern = /<a[^>]+href="(https?:\/\/(?:www\.)?goharvestmarket\.com\/(?:event|events?)[^"]+)"[^>]*>([^<]{3,100})<\/a>/gi;
+    return scrapeLinksFromHTML(html, pattern, 'Harvest Market Farmhouse Brews');
   } catch { return []; }
 }
