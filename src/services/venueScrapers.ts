@@ -317,6 +317,57 @@ async function scrapeThePageant(): Promise<UnifiedEvent[]> {
   } catch { return []; }
 }
 
+// ── Springfield: Bloomington-area venues ──
+
+interface BloomVenueEvent {
+  title: string;
+  url: string;
+  date: string;
+  time: string;
+  price: string;
+  venueName: string;
+}
+
+const BLOOM_VENUE_COORDS: Record<string, { lat: number; lng: number; address: string; city: string; state: string }> = {
+  'Connie Link Amphitheatre':     { lat: 40.5024, lng: -88.9830, address: '621 S Linden St, Normal, IL 61761', city: 'Normal', state: 'IL' },
+  'Six Strings Club':             { lat: 40.4858, lng: -88.9942, address: '525 N Center St, Bloomington, IL 61701', city: 'Bloomington', state: 'IL' },
+  'Devon Lakeshore Amphitheater': { lat: 39.8337, lng: -88.9190, address: '2686 E Cantrell St, Decatur, IL 62521', city: 'Decatur', state: 'IL' },
+};
+
+async function scrapeBloomingtonVenues(): Promise<UnifiedEvent[]> {
+  try {
+    const url = isDev ? '/api/bloomvenues/' : '/api/bloomvenues';
+    const response = await fetch(url);
+    if (!response.ok) return [];
+
+    const data: { events: BloomVenueEvent[] } = await response.json();
+    const today = new Date().toISOString().slice(0, 10);
+
+    return (data.events ?? [])
+      .filter((e) => e.date >= today)
+      .map((e): UnifiedEvent => {
+        const coords = BLOOM_VENUE_COORDS[e.venueName] ?? { lat: 40.4842, lng: -88.9937, address: 'Bloomington, IL', city: 'Bloomington', state: 'IL' };
+        return {
+          id: `venue_bloom_${e.venueName.replace(/\W/g, '')}_${e.date}_${e.title.slice(0, 15).replace(/\W/g, '')}`,
+          source: 'venue-scraper' as UnifiedEvent['source'],
+          name: e.title,
+          artistName: e.title.split(/[/,–]/)[0].trim(),
+          artistImageUrl: null,
+          venue: { name: e.venueName, city: coords.city, state: coords.state, country: 'US', latitude: coords.lat, longitude: coords.lng, address: coords.address },
+          dateTime: `${e.date}T${e.time}:00`,
+          localDate: e.date,
+          localTime: e.time,
+          genres: [],
+          ticketUrl: e.url,
+          priceRange: e.price && e.price !== 'Free'
+            ? { min: parseFloat(e.price.replace(/[^0-9.]/g, '')), max: parseFloat(e.price.replace(/[^0-9.]/g, '')), currency: 'USD' }
+            : null,
+          status: 'onsale',
+        };
+      });
+  } catch { return []; }
+}
+
 // ── Springfield: Local Springfield IL venues ──
 
 interface SPRVenueEvent {
@@ -373,7 +424,7 @@ async function scrapeSpringfieldVenues(): Promise<UnifiedEvent[]> {
 
 export async function scrapeAllVenues(city: CityKey = 'boston'): Promise<UnifiedEvent[]> {
   const scrapers = city === 'springfield'
-    ? [scrapeCastleTheatre(), scrapeCanopyClub(), scrapeThePageant(), scrapeSTLVenues(), scrapeSpringfieldVenues()]
+    ? [scrapeCastleTheatre(), scrapeCanopyClub(), scrapeThePageant(), scrapeSTLVenues(), scrapeSpringfieldVenues(), scrapeBloomingtonVenues()]
     : [scrapeFaces(), scrapeOBriens(), scrapeTheMet()];
 
   const results = await Promise.allSettled(scrapers);
