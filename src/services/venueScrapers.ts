@@ -26,19 +26,37 @@ interface SquarespaceItem {
 }
 
 function parseExcerptDate(excerpt: string): { localDate: string; localTime: string | null } | null {
-  const match = excerpt.match(
-    /(\d{1,2})\s*(am|pm)\s*Doors?\s*-\s*(\w+)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})/i
-  );
-  if (!match) return null;
+  // Strip HTML tags so patterns work on plain text
+  const text = excerpt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
-  const [, hourStr, ampm, monthName, dayStr, yearStr] = match;
-  const months: Record<string, string> = {
+  const MONTHS: Record<string, string> = {
     january: '01', february: '02', march: '03', april: '04',
     may: '05', june: '06', july: '07', august: '08',
     september: '09', october: '10', november: '11', december: '12',
   };
 
-  const month = months[monthName.toLowerCase()];
+  const MONTH_NAMES = 'January|February|March|April|May|June|July|August|September|October|November|December';
+
+  // Pattern A: "8 pm Doors - May 8th, 2026"  (original format)
+  const matchA = text.match(
+    new RegExp(`(\\d{1,2})\\s*(am|pm)\\s*Doors?\\s*-\\s*(${MONTH_NAMES})\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s*(\\d{4})`, 'i')
+  );
+  // Pattern B: "8 pm - May 8th, 2026"  (no "Doors" keyword)
+  const matchB = text.match(
+    new RegExp(`(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)\\s*[-–]\\s*(${MONTH_NAMES})\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s*(\\d{4})`, 'i')
+  );
+
+  let hourStr: string, ampm: string, monthName: string, dayStr: string, yearStr: string;
+
+  if (matchA) {
+    [, hourStr, ampm, monthName, dayStr, yearStr] = matchA;
+  } else if (matchB) {
+    [, hourStr, , ampm, monthName, dayStr, yearStr] = matchB;
+  } else {
+    return null;
+  }
+
+  const month = MONTHS[monthName.toLowerCase()];
   if (!month) return null;
 
   let hour = parseInt(hourStr);
